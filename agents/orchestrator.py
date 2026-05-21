@@ -1,25 +1,27 @@
-from langchain_groq import ChatGroq
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
-
+from agents.base_agent import create_agent
+from agents.analyst_agent import create_analyst_agent
+from agents.nlp_agent import create_nlp_agent
+from core.model_factory import create_model
 from prompts.loader import load_prompt
 
 
-def create_orchestrator(tools):
+def create_orchestrator(all_tools: list):
     """
-    Cria o agente orquestrador principal.
-    Recebe todas as tools disponíveis e decide qual usar a cada interação.
-    Para expandir para múltiplos agentes, crie funções análogas neste pacote
-    (ex: create_analyst_agent, create_nlp_agent) e adicione um supervisor aqui.
-    """
-    model = ChatGroq(model="openai/gpt-oss-120b")
-    memory = MemorySaver()
-    prompt = load_prompt("1_orquestrador.txt")
+    Orquestrador (supervisor dos sub-agentes).
+    Não executa tarefas diretamente — delega para o agente especialista correto.
 
-    agent = create_react_agent(
-        model=model,
-        tools=tools,
-        prompt=prompt,
-        checkpointer=memory,
-    )
-    return agent
+    Para adicionar um novo agente:
+      1. Crie agents/novo_agente.py com create_novo_agent(model, all_tools)
+      2. Importe e instancie abaixo
+      3. Adicione à lista sub_agent_tools
+    """
+    model = create_model()
+
+    # Instancia sub-agentes como tools
+    analyst_tool = create_analyst_agent(model, all_tools)
+    nlp_tool = create_nlp_agent(model, all_tools)
+
+    sub_agent_tools = [analyst_tool, nlp_tool]
+
+    prompt = load_prompt("1_orquestrador.txt")
+    return create_agent(model, sub_agent_tools, prompt)

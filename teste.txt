@@ -1,0 +1,156 @@
+mcp_v2/
+│
+├── main.py
+│   # Ponto de entrada do sistema.
+│   # Responsabilidades: carregar .env, conectar ao servidor MCP, buscar as tools,
+│   # instanciar o orquestrador e rodar o loop de conversa com o usuário.
+│   # Não contém lógica de agente — apenas monta e executa.
+│   #
+│   # Fluxo:
+│   #   1. load_dotenv()
+│   #   2. MultiServerMCPClient → busca tools do mcp_servers.py via stdio
+│   #   3. create_orchestrator(tools) → monta todo o grafo de agentes
+│   #   4. while True: input → astream → pretty_print
+│
+├── mcp_servers.py
+│   # Servidor MCP — processo separado que o main.py inicia via stdio.
+│   # Responsabilidades: instanciar o FastMCP e registrar todas as tools por domínio.
+│   # Não contém lógica de agente nem de prompt.
+│   #
+│   # Para adicionar um novo domínio de tools:
+│   #   1. Crie tools/novo_dominio.py com register_tools(mcp)
+│   #   2. Importe e chame register_novo_dominio(mcp) aqui
+│   #
+│   # MCP_SERVERS_CONFIG: dicionário lido pelo main.py para saber como iniciar este servidor.
+│
+├── core/
+│   └── model_factory.py
+│       # Fábrica do LLM — único lugar do projeto que instancia o modelo.
+│       # Responsabilidade: criar e retornar o objeto ChatGroq configurado.
+│       # O nome do modelo vem da variável de ambiente MODEL_NAME (.env),
+│       # com fallback para "openai/gpt-oss-120b".
+│       #
+│       # Por que centralizar aqui?
+│       #   - Trocar de modelo (ex: Groq → OpenAI) exige mudança em 1 arquivo.
+│       #   - Todos os agentes sempre usam o mesmo modelo, sem duplicação.
+│       #
+│       # Uso: from core.model_factory import create_model
+│       #      model = create_model()
+│
+├── agents/
+│   │
+│   ├── base_agent.py
+│   │   # Infraestrutura reutilizável para todos os agentes.
+│   │   # Contém 2 funções que todos os agentes usam:
+│   │   #
+│   │   # create_agent(model, tools, prompt) → AgentExecutor
+│   │   #   Cria um agente ReAct com MemorySaver.
+│   │   #   Todo agente do sistema passa por aqui — nenhum chama
+│   │   #   create_react_agent diretamente.
+│   │   #
+│   │   # agent_as_tool(agent, name, description) → Tool
+│   │   #   Encapsula um agente como uma Tool do LangChain.
+│   │   #   Isso permite que o orquestrador "chame" um sub-agente
+│   │   #   da mesma forma que chama qualquer outra tool.
+│   │   #   O orquestrador não sabe que está chamando um agente —
+│   │   #   para ele é só mais uma tool que recebe uma mensagem e retorna texto.
+│   │
+│   ├── orchestrator.py
+│   │   # Supervisor do sistema — o agente que o usuário enxerga.
+│   │   # Responsabilidade: entender a intenção do usuário e delegar
+│   │   # para o sub-agente correto. Nunca executa tarefas diretamente.
+│   │   #
+│   │   # Como funciona:
+│   │   #   1. Instancia analyst_agent e nlp_agent como Tools
+│   │   #   2. Passa essas Tools para create_agent() com o prompt de orquestrador
+│   │   #   3. O LLM do orquestrador lê o prompt e decide qual "tool" (sub-agente) chamar
+│   │   #
+│   │   # Para adicionar um novo sub-agente:
+│   │   #   1. Importe create_X_agent
+│   │   #   2. Instancie: x_tool = create_X_agent(model, all_tools)
+│   │   #   3. Adicione x_tool à lista sub_agent_tools
+│   │
+│   ├── analyst_agent.py
+│   │   # Agente especialista em dados e CSV.
+│   │   # Responsabilidade: toda tarefa que envolva arquivos CSV,
+│   │   # filtragem, estatísticas e detecção de anomalias.
+│   │   #
+│   │   # ANALYST_TOOL_NAMES: conjunto com os nomes exatos das tools
+│   │   # que este agente pode usar (filtradas de all_tools).
+│   │   # Isso evita que o analista chame tools de NLP por engano.
+│   │   #
+│   │   # Retorna: uma Tool (via agent_as_tool) chamada "analyst_agent"
+│   │   # que o orquestrador pode invocar passando apenas uma string.
+│   │
+│   └── nlp_agent.py
+│       # Agente especialista em processamento de linguagem natural.
+│       # Responsabilidade: resumo de texto, análise de sentimento,
+│       # extração de palavras-chave.
+│       #
+│       # NLP_TOOL_NAMES: tools restritas ao domínio de texto.
+│       # Não tem acesso a load_csv, filter_session, etc.
+│       #
+│       # Retorna: uma Tool chamada "nlp_agent" para o orquestrador.
+│
+├── prompts/
+│   │
+│   ├── loader.py
+│   │   # Utilitário simples: load_prompt("arquivo.txt") → str
+│   │   # Lê o arquivo .txt da pasta prompts/ pelo nome.
+│   │   # Lança FileNotFoundError se o arquivo não existir.
+│   │   # Usado por todos os agentes para carregar seus prompts.
+│   │
+│   ├── 1_orquestrador.txt
+│   │   # Prompt do orquestrador.
+│   │   # Define: quais sub-agentes existem, quando chamar cada um,
+│   │   # e a regra de nunca executar tarefas diretamente.
+│   │   # Quando adicionar um novo agente, atualize este arquivo
+│   │   # para o orquestrador saber que ele existe.
+│   │
+│   ├── 2_agente_analista.txt
+│   │   # Prompt do analyst_agent.
+│   │   # Define: especialidade em dados, quais tools usar e em qual ordem,
+│   │   # e o que ele NÃO deve fazer (NLP, clustering, etc.).
+│   │
+│   ├── 3_agente_nlp.txt
+│   │   # Prompt do nlp_agent.
+│   │   # Define: especialidade em texto, quais tools de NLP usar,
+│   │   # e proibição de acessar dados/CSV.
+│   │
+│   └── 4_agente_cluster.txt
+│       # ⚠ Prompt pronto, agente ainda não criado.
+│       # Define: especialidade em clusterização e segmentação.
+│       # Para ativar: crie agents/cluster_agent.py seguindo o
+│       # padrão de analyst_agent.py e registre no orchestrator.py.
+│
+└── tools/
+    │   # Tools MCP — executadas no processo do mcp_servers.py.
+    │   # Cada arquivo agrupa tools de um domínio.
+    │   # Todas expõem register_tools(mcp) como contrato padrão.
+    │
+    ├── general_tools.py
+    │   # Tools de uso geral, disponíveis para qualquer agente.
+    │   # - sequential_thinking: raciocínio passo a passo antes de responder
+    │   # - sum_numbers: operação aritmética simples
+    │
+    ├── data_tools.py
+    │   # Tools do domínio de dados.
+    │   # Estado compartilhado via _SESSION_DATA (dict em memória):
+    │   #   o DataFrame nunca trafega pelo chat — apenas o session_id.
+    │   #
+    │   # - load_csv(file_path, session_id): carrega CSV na sessão
+    │   # - read_csv(file_path): lê CSV sem armazenar (consulta rápida)
+    │   # - filter_session(session_id, column, value): filtra e sobrescreve sessão
+    │   # - describe_session(session_id): estatísticas descritivas da sessão
+    │   # - detect_anomalies(session_id, column): outliers via IQR
+    │   # - get_text_from_session(session_id, column): extrai coluna texto → string para NLP
+    │   # - clear_session(session_id): libera DataFrame da memória
+    │
+    └── nlp_tools.py
+        # Tools do domínio de linguagem natural.
+        # Todas recebem texto puro (string) como entrada —
+        # use get_text_from_session para alimentá-las com dados do CSV.
+        #
+        # - summarize_text(text, num_sentences): resumo extrativo
+        # - classify_sentiment(text): positivo / negativo / neutro
+        # - extract_keywords(text, top_n): palavras mais frequentes
