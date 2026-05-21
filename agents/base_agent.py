@@ -1,29 +1,35 @@
+import uuid
+
 from langchain_core.tools import StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 
-def create_agent(model, tools: list, prompt: str):
+def create_agent(model, tools: list, prompt: str, use_memory: bool = True):
     """
-    Cria um agente ReAct com memória.
-    Reutilizável por qualquer agente do sistema.
+    Cria um agente ReAct.
+    - use_memory=True  → orquestrador: mantém histórico entre turnos do usuário.
+    - use_memory=False → sub-agentes: stateless, sem acumulação de contexto entre chamadas.
     """
-    memory = MemorySaver()
+    checkpointer = MemorySaver() if use_memory else None
     return create_react_agent(
         model=model,
         tools=tools,
         prompt=prompt,
-        checkpointer=memory,
+        checkpointer=checkpointer,
+        version="v2",
     )
 
 
 def agent_as_tool(agent, name: str, description: str):
     """
-    Encapsula um agente como uma Tool async para que o orquestrador possa delegá-lo.
-    Usa ainvoke para compatibilidade com tools MCP que são async-only.
+    Encapsula um sub-agente como Tool async.
+    Cada invocação usa um thread_id único para evitar acumulação de histórico
+    e estouro de tokens (rate limit TPM).
     """
     async def _ainvoke(message: str) -> str:
-        config = {"configurable": {"thread_id": f"{name}_thread"}}
+        # thread_id único por chamada — sub-agentes são stateless por design
+        config = {"configurable": {"thread_id": f"{name}_{uuid.uuid4().hex}"}}
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": message}]},
             config,

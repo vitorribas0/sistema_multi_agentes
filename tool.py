@@ -1,5 +1,6 @@
 from langchain_core.tools import tool
 import pandas as pd
+import os
 
 CARS = ['Marea', 'Corsa', 'Uno', 'Gol']
 
@@ -17,16 +18,32 @@ def add_car(car_name: str) -> list:
 
 
 @tool
-def read_csv(file_path: str) -> str:
-    """Lê um arquivo CSV do caminho especificado e retorna as primeiras linhas como string.
+def load_file(file_path: str) -> str:
+    """Lê um arquivo CSV ou Excel (.csv, .xlsx, .xls) e retorna o schema, as 3 primeiras linhas e o total de registros.
     Args:
-        file_path (str): Caminho completo para o arquivo CSV.
+        file_path (str): Caminho completo para o arquivo.
 
     Returns:
-        str: As primeiras linhas do arquivo CSV como string.
+        str: Schema (colunas e tipos), 3 primeiras linhas e total de registros.
     """
     try:
-        df = pd.read_csv(file_path)
-        return df.head().to_string()
+        normalized = os.path.normpath(os.path.abspath(file_path))
+        if not os.path.exists(normalized):
+            return f"Arquivo não encontrado: {normalized}"
+        ext = os.path.splitext(normalized)[1].lower()
+        if ext == ".csv":
+            df = pd.read_csv(normalized)
+        elif ext in {".xlsx", ".xls"}:
+            df = pd.read_excel(normalized)
+        else:
+            return f"Formato '{ext}' não suportado. Use .csv, .xlsx ou .xls."
+        schema_lines = "\n".join(f"  {col}: {dtype}" for col, dtype in df.dtypes.items())
+        preview = df.head(3).to_string(index=False)
+        return (
+            f"Arquivo: {os.path.basename(normalized)}\n"
+            f"Total de linhas: {len(df)} | Total de colunas: {len(df.columns)}\n\n"
+            f"Schema (coluna: tipo):\n{schema_lines}\n\n"
+            f"Primeiras 3 linhas:\n{preview}"
+        )
     except Exception as e:
-        return f"Erro ao ler o arquivo CSV: {e}"
+        return f"Erro ao ler o arquivo: {e}"

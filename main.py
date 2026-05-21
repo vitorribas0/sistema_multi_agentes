@@ -15,7 +15,10 @@ async def main():
 
     agent_executor = create_orchestrator(tools)
 
-    config = {'configurable': {'thread_id': '1'}}
+    config = {
+        'configurable': {'thread_id': '1'},
+        'recursion_limit': 100,
+    }
 
     while True:
         input_message = {

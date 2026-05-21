@@ -6,6 +6,8 @@ NLP_TOOL_NAMES = {
     "summarize_text",
     "classify_sentiment",
     "extract_keywords",
+    "preprocess_text_column",
+    "quantify_keywords",
     "sequential_thinking",
 }
 
@@ -17,7 +19,7 @@ def create_nlp_agent(model, all_tools: list):
     """
     tools = [t for t in all_tools if t.name in NLP_TOOL_NAMES]
     prompt = load_prompt("3_agente_nlp.txt")
-    agent = create_agent(model, tools, prompt)
+    agent = create_agent(model, tools, prompt, use_memory=False)
 
     return agent_as_tool(
         agent,
