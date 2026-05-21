@@ -5,6 +5,7 @@ from prompts.loader import load_prompt
 ANALYST_TOOL_NAMES = {
     "load_file",
     "get_session_info",
+    "query_dataframe",
     "filter_session",
     "search_session",
     "describe_session",

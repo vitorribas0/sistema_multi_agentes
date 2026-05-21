@@ -250,3 +250,36 @@ def register_tools(mcp):
             f"Caminho: {out_path}\n"
             f"Linhas: {len(df)} | Colunas: {len(df.columns)}"
         )
+
+    @mcp.tool(
+        description=(
+            "Executa qualquer análise ou consulta sobre os dados da sessão usando linguagem natural. "
+            "Use para perguntas complexas que os outros tools não cobrem: agrupamentos, cálculos, "
+            "contagens condicionais, comparações entre colunas, listagens específicas, etc. "
+            "Parâmetros: session_id (sessão com dados carregados), question (pergunta em português)."
+        )
+    )
+    def query_dataframe(session_id: str, question: str) -> str:
+        """Responde perguntas em linguagem natural sobre o DataFrame da sessão via pandas agent."""
+        from langchain_experimental.agents import create_pandas_dataframe_agent
+        from core.model_factory import create_model
+
+        df = _SESSION_DATA.get(session_id)
+        if df is None:
+            return f"Sessão '{session_id}' não encontrada. Use load_file primeiro."
+
+        try:
+            llm = create_model()
+            agent = create_pandas_dataframe_agent(
+                llm=llm,
+                df=df,
+                verbose=False,
+                allow_dangerous_code=True,
+                agent_type="tool-calling",
+                max_iterations=10,
+            )
+            result = agent.invoke({"input": question})
+            output = str(result.get("output", result))
+            return _truncate(output)
+        except Exception as e:
+            return f"Erro ao executar consulta: {e}"

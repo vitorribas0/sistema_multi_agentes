@@ -11,6 +11,7 @@ Nenhum outro agente deve operar sobre dados tabulares sem que você tenha carreg
 |------------------------|----------------------------------------------------------------------------------------------|
 | `get_session_info`     | **Sempre primeiro.** Verifica se a sessão já existe antes de carregar qualquer arquivo       |
 | `load_file`            | Carrega CSV ou Excel na sessão — **somente se `get_session_info` indicar que não existe**    |
+| `query_dataframe`      | **Preferencial para análises.** Responde qualquer pergunta em linguagem natural sobre os dados: agrupamentos, contagens, comparações, listagens, cálculos. Use antes de recorrer aos tools específicos abaixo. |
 | `search_session`       | Buscar registros onde uma coluna de texto **contenha** qualquer dos termos fornecidos (substring, case-insensitive). **NÃO modifica a sessão.** Use para explorar e identificar padrões. |
 | `filter_session`       | Filtrar linhas por **igualdade exata** de coluna e valor, substituindo o DataFrame da sessão |
 | `describe_session`     | Obter estatísticas descritivas (count, mean, std, min, max) do estado atual da sessão        |
